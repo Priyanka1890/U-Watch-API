@@ -4,7 +4,16 @@ import { sql, executeQuery } from "@/lib/db"
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { userId, cycleDate, flowLevel, symptoms, mood, notes } = body
+    const { 
+      userId, 
+      cycleDate, 
+      flowLevel, 
+      symptoms, 
+      mood, 
+      notes,
+      isPregnant,
+      pregnancyDuration
+    } = body
 
     // Validate required fields
     if (!userId) {
@@ -24,10 +33,10 @@ export async function POST(request: NextRequest) {
       // Convert symptoms to array if it's not already
       const symptomsArray = Array.isArray(symptoms) ? symptoms : typeof symptoms === "string" ? [symptoms] : []
 
-      // Insert menstrual data
+      // Insert menstrual data with pregnancy fields
       return await sql`
         INSERT INTO menstrual_data (
-          user_id, cycle_date, flow_level, symptoms, mood, notes
+          user_id, cycle_date, flow_level, symptoms, mood, notes, is_pregnant, pregnancy_duration
         )
         VALUES (
           ${userId}, 
@@ -35,7 +44,9 @@ export async function POST(request: NextRequest) {
           ${flowLevel || 0}, 
           ${symptomsArray}, 
           ${mood || null}, 
-          ${notes || null}
+          ${notes || null},
+          ${isPregnant || false},
+          ${pregnancyDuration || null}
         )
         RETURNING *
       `

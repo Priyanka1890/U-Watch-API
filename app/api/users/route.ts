@@ -4,7 +4,16 @@ import { sql, executeQuery } from "@/lib/db"
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { userId, name, sex, age, height, weight, medications } = body
+    const { 
+      userId, 
+      name, 
+      sex, 
+      age, 
+      height, 
+      weight, 
+      medications,
+      legacyUUID // Support for legacy UUID mapping
+    } = body
 
     // Validate required fields
     if (!userId) {
@@ -28,6 +37,7 @@ export async function POST(request: NextRequest) {
             height = ${height || null}, 
             weight = ${weight || null}, 
             medications = ${medications || null},
+            legacy_uuid = ${legacyUUID || null},
             updated_at = CURRENT_TIMESTAMP
           WHERE user_id = ${userId}
           RETURNING *
@@ -35,8 +45,17 @@ export async function POST(request: NextRequest) {
       } else {
         // Insert new user
         return await sql`
-          INSERT INTO users (user_id, name, sex, age, height, weight, medications)
-          VALUES (${userId}, ${name || null}, ${sex || null}, ${age || null}, ${height || null}, ${weight || null}, ${medications || null})
+          INSERT INTO users (user_id, name, sex, age, height, weight, medications, legacy_uuid)
+          VALUES (
+            ${userId}, 
+            ${name || null}, 
+            ${sex || null}, 
+            ${age || null}, 
+            ${height || null}, 
+            ${weight || null}, 
+            ${medications || null},
+            ${legacyUUID || null}
+          )
           RETURNING *
         `
       }
@@ -55,15 +74,22 @@ export async function POST(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   const userId = request.nextUrl.searchParams.get("userId")
+  const legacyUUID = request.nextUrl.searchParams.get("legacyUUID")
 
-  if (!userId) {
-    return NextResponse.json({ error: "User ID is required" }, { status: 400 })
+  if (!userId && !legacyUUID) {
+    return NextResponse.json({ error: "User ID or Legacy UUID is required" }, { status: 400 })
   }
 
   const { data, error } = await executeQuery(async () => {
-    return await sql`
-      SELECT * FROM users WHERE user_id = ${userId}
-    `
+    if (userId) {
+      return await sql`
+        SELECT * FROM users WHERE user_id = ${userId}
+      `
+    } else {
+      return await sql`
+        SELECT * FROM users WHERE legacy_uuid = ${legacyUUID}
+      `
+    }
   })
 
   if (error) {
