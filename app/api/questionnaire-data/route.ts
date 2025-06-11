@@ -1,162 +1,100 @@
-import { type NextRequest, NextResponse } from "next/server"
-import { sql, executeQuery } from "@/lib/db"
+// app/api/questionnaire-data/route.ts
+import { NextRequest, NextResponse } from 'next/server';
+import prisma from '@/lib/prisma';
 
-export async function POST(request: NextRequest) {
+export async function POST(req: NextRequest) {
+  const {
+    userId,
+    timestamp,
+
+    energyLevel,
+    stressLevel,
+    sleepQuality,
+    headache,
+    musclePain,
+    dizziness,
+    nausea,
+    notes,
+
+    submissionDate,
+    isSubmitted,
+    completionStatus,
+    questionnaireVersion,
+
+    dataType,
+    energyDataPoints,
+    averageEnergyLevel,
+    dataPointCount,
+    lastEnergyLevel,
+    lastEnergyTimestamp,
+
+    emergencyType,
+    locationCategory,
+    heartRate,    // emergency heart rate
+    isActive,
+  } = await req.json();
+
+  if (!userId) {
+    return NextResponse.json({ error: 'userId is required' }, { status: 400 });
+  }
+
   try {
-    const body = await request.json()
-    const {
-      userId,
-      timestamp,
-      submissionDate,
-      isSubmitted,
-      energyLevel,
-      stressLevel,
-      sleepQuality,
-      headache,
-      musclePain,
-      dizziness,
-      nausea,
-      notes,
-      completionStatus,
-      questionnaireVersion,
-      // Handle energy graph data
-      dataType,
-      energyDataPoints,
-      averageEnergyLevel,
-      dataPointCount,
-      lastEnergyLevel,
-      lastEnergyTimestamp,
-      // Handle emergency data
-      emergencyType,
-      locationCategory,
-      heartRate,
-      isActive
-    } = body
+    const rec = await prisma.questionnaire_data.create({
+      data: {
+        user_id:              userId,
+        timestamp:            timestamp ? new Date(timestamp) : undefined,
 
-    // Validate required fields
-    if (!userId) {
-      return NextResponse.json({ error: "User ID is required" }, { status: 400 })
-    }
+        energy_level:         energyLevel,
+        stress_level:         stressLevel,
+        sleep_quality:        sleepQuality,
+        headache,
+        muscle_pain:          musclePain,
+        dizziness,
+        nausea,
+        notes,
 
-    const { data, error } = await executeQuery(async () => {
-      // Check if user exists
-      const existingUser = await sql`
-        SELECT user_id FROM users WHERE user_id = ${userId}
-      `
+        submission_date:      submissionDate ? new Date(submissionDate) : undefined,
+        is_submitted:         isSubmitted,
+        completion_status:    completionStatus,
+        questionnaire_version: questionnaireVersion,
 
-      if (existingUser.length === 0) {
-        throw new Error("User not found")
-      }
+        data_type:            dataType,
+        energy_data_points:   energyDataPoints,
+        average_energy_level: averageEnergyLevel,
+        data_point_count:     dataPointCount,
+        last_energy_level:    lastEnergyLevel,
+        last_energy_timestamp: lastEnergyTimestamp ? new Date(lastEnergyTimestamp) : undefined,
 
-      // Handle different data types
-      if (dataType === "energyGraph") {
-        // Insert energy graph data
-        return await sql`
-          INSERT INTO questionnaire_data (
-            user_id, timestamp, data_type, energy_data_points, average_energy_level,
-            data_point_count, last_energy_level, last_energy_timestamp, notes
-          )
-          VALUES (
-            ${userId}, 
-            ${timestamp ? new Date(timestamp) : new Date()}, 
-            ${dataType},
-            ${JSON.stringify(energyDataPoints || [])},
-            ${averageEnergyLevel || null},
-            ${dataPointCount || null},
-            ${lastEnergyLevel || null},
-            ${lastEnergyTimestamp ? new Date(lastEnergyTimestamp) : null},
-            ${notes || null}
-          )
-          RETURNING *
-        `
-      } else if (dataType === "emergency") {
-        // Insert emergency data
-        return await sql`
-          INSERT INTO questionnaire_data (
-            user_id, timestamp, data_type, emergency_type, location_category,
-            heart_rate, is_active, notes
-          )
-          VALUES (
-            ${userId}, 
-            ${timestamp ? new Date(timestamp) : new Date()}, 
-            ${dataType},
-            ${emergencyType || null},
-            ${locationCategory || null},
-            ${heartRate || null},
-            ${isActive || false},
-            ${notes || null}
-          )
-          RETURNING *
-        `
-      } else {
-        // Insert regular questionnaire data
-        return await sql`
-          INSERT INTO questionnaire_data (
-            user_id, timestamp, submission_date, is_submitted, energy_level, stress_level, sleep_quality,
-            headache, muscle_pain, dizziness, nausea, notes, completion_status, questionnaire_version
-          )
-          VALUES (
-            ${userId}, 
-            ${timestamp ? new Date(timestamp) : new Date()}, 
-            ${submissionDate ? new Date(submissionDate) : null},
-            ${isSubmitted || false},
-            ${energyLevel || null}, 
-            ${stressLevel || null}, 
-            ${sleepQuality || null},
-            ${headache || false}, 
-            ${musclePain || false}, 
-            ${dizziness || false}, 
-            ${nausea || false}, 
-            ${notes || null},
-            ${completionStatus || "pending"},
-            ${questionnaireVersion || "1.0"}
-          )
-          RETURNING *
-        `
-      }
-    })
-
-    if (error) {
-      return NextResponse.json({ error }, { status: 500 })
-    }
-
-    return NextResponse.json({ success: true, data })
-  } catch (error) {
-    console.error("Error in questionnaire-data API:", error)
-    return NextResponse.json({ error: "Failed to process request" }, { status: 500 })
+        emergency_type:       emergencyType,
+        location_category:    locationCategory,
+        heart_rate:           heartRate,
+        is_active:            isActive,
+      },
+    });
+    return NextResponse.json({ success: true, data: rec });
+  } catch (error: any) {
+    console.error(error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
 
-export async function GET(request: NextRequest) {
-  const userId = request.nextUrl.searchParams.get("userId")
-  const dataType = request.nextUrl.searchParams.get("dataType")
-  const limit = Number.parseInt(request.nextUrl.searchParams.get("limit") || "100")
+export async function GET(req: NextRequest) {
+  const userId = req.nextUrl.searchParams.get('userId');
+  const limit  = Number(req.nextUrl.searchParams.get('limit') || '100');
 
   if (!userId) {
-    return NextResponse.json({ error: "User ID is required" }, { status: 400 })
+    return NextResponse.json({ error: 'userId is required' }, { status: 400 });
   }
 
-  const { data, error } = await executeQuery(async () => {
-    if (dataType) {
-      return await sql`
-        SELECT * FROM questionnaire_data 
-        WHERE user_id = ${userId} AND data_type = ${dataType}
-        ORDER BY timestamp DESC
-        LIMIT ${limit}
-      `
-    } else {
-      return await sql`
-        SELECT * FROM questionnaire_data 
-        WHERE user_id = ${userId}
-        ORDER BY timestamp DESC
-        LIMIT ${limit}
-      `
-    }
-  })
-
-  if (error) {
-    return NextResponse.json({ error }, { status: 500 })
+  try {
+    const rows = await prisma.questionnaire_data.findMany({
+      where: { user_id: userId },
+      orderBy: { timestamp: 'desc' },
+      take: limit,
+    });
+    return NextResponse.json({ success: true, data: rows });
+  } catch (error: any) {
+    console.error(error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
-
-  return NextResponse.json(data)
 }

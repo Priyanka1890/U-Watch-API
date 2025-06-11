@@ -1,144 +1,129 @@
-import { type NextRequest, NextResponse } from "next/server"
-import { sql, executeQuery } from "@/lib/db"
+// app/api/health-data/route.ts
+import { NextRequest, NextResponse } from 'next/server';
+import prisma from '@/lib/prisma';
 
-export async function POST(request: NextRequest) {
+export async function POST(req: NextRequest) {
+  const body = await req.json();
+  const {
+    userId,
+    timestamp,
+
+    heartRate,
+    maxHeartRate,
+    minHeartRate,
+    heartRateVariability,
+    respiratoryRate,
+    walkingHeartRateAvg,
+
+    oxygenSaturation,
+    activityLevel,
+    steps,
+    distance,
+    caloriesBurned,
+
+    bloodPressureSystolic,
+    bloodPressureDiastolic,
+
+    bodyTemperature,
+    environmentType,
+    motionType,
+    locationCategory,
+    locationName,
+    weather,
+    temperature,
+    humidity,
+
+    activityEnergy,
+    basalEnergy,
+    flightsClimbed,
+    sleepAnalysis,
+    exerciseMinutes,
+    standHours,
+    workoutCount,
+    cyclingDistance,
+    stateOfMind,
+    timeAsleep,
+    remSleep,
+    coreSleep,
+    deepSleep,
+    awakeTime,
+  } = body;
+
+  if (!userId) {
+    return NextResponse.json({ error: 'userId is required' }, { status: 400 });
+  }
+
   try {
-    const body = await request.json()
-    const {
-      userId,
-      timestamp,
-      // Heart & Fitness metrics
-      heartRate,
-      maxHeartRate,
-      minHeartRate,
-      heartRateVariability,
-      respiratoryRate,
-      walkingHeartRateAvg,
-      oxygenSaturation,
-      
-      // Activity & Energy metrics
-      steps,
-      activityEnergy,
-      basalEnergy,
-      distance,
-      flightsClimbed,
-      sleepAnalysis,
-      
-      // Additional metrics
-      exerciseMinutes,
-      standHours,
-      workoutCount,
-      cyclingDistance,
-      stateOfMind,
-      timeAsleep,
-      
-      // Detailed sleep metrics
-      remSleep,
-      coreSleep,
-      deepSleep,
-      awakeTime,
-      
-      // Legacy fields for backward compatibility
-      activityLevel,
-      caloriesBurned,
-      
-      // Location & Environment metrics (now using categories)
-      locationCategory,
-      environmentType,
-      motionType,
-      
-      // Weather metrics
-      weather,
-      temperature,
-      humidity,
-      
-      // Legacy fields
-      bloodPressureSystolic,
-      bloodPressureDiastolic,
-      bodyTemperature,
-      locationName,
-    } = body
+    const rec = await prisma.health_data.create({
+      data: {
+        user_id: userId,
+        timestamp: timestamp ? new Date(timestamp) : undefined,
 
-    // Validate required fields
-    if (!userId) {
-      return NextResponse.json({ error: "User ID is required" }, { status: 400 })
-    }
+        heart_rate:            heartRate,
+        max_heart_rate:        maxHeartRate,
+        min_heart_rate:        minHeartRate,
+        heart_rate_variability: heartRateVariability,
+        respiratory_rate:      respiratoryRate,
+        walking_heart_rate_avg: walkingHeartRateAvg,
 
-    const { data, error } = await executeQuery(async () => {
-      // Check if user exists
-      const existingUser = await sql`
-        SELECT user_id FROM users WHERE user_id = ${userId}
-      `
+        oxygen_saturation: oxygenSaturation,
+        activity_level:    activityLevel,
+        steps,
+        distance,
+        calories_burned:   caloriesBurned,
 
-      if (existingUser.length === 0) {
-        throw new Error("User not found")
-      }
+        blood_pressure_systolic:  bloodPressureSystolic,
+        blood_pressure_diastolic: bloodPressureDiastolic,
 
-      // Insert health data with all new fields
-      return await sql`
-        INSERT INTO health_data (
-          user_id, timestamp, 
-          heart_rate, max_heart_rate, min_heart_rate, heart_rate_variability,
-          respiratory_rate, walking_heart_rate_avg, oxygen_saturation,
-          steps, activity_energy, basal_energy, distance, flights_climbed, sleep_analysis,
-          exercise_minutes, stand_hours, workout_count, cycling_distance, state_of_mind, time_asleep,
-          rem_sleep, core_sleep, deep_sleep, awake_time,
-          activity_level, calories_burned,
-          location_category, environment_type, motion_type,
-          weather, temperature, humidity,
-          blood_pressure_systolic, blood_pressure_diastolic, body_temperature, location_name
-        )
-        VALUES (
-          ${userId}, 
-          ${timestamp ? new Date(timestamp) : new Date()}, 
-          ${heartRate || null}, ${maxHeartRate || null}, ${minHeartRate || null}, ${heartRateVariability || null},
-          ${respiratoryRate || null}, ${walkingHeartRateAvg || null}, ${oxygenSaturation || null},
-          ${steps || null}, ${activityEnergy || null}, ${basalEnergy || null}, ${distance || null}, 
-          ${flightsClimbed || null}, ${sleepAnalysis || null},
-          ${exerciseMinutes || null}, ${standHours || null}, ${workoutCount || null}, 
-          ${cyclingDistance || null}, ${stateOfMind || null}, ${timeAsleep || null},
-          ${remSleep || null}, ${coreSleep || null}, ${deepSleep || null}, ${awakeTime || null},
-          ${activityLevel || null}, ${caloriesBurned || null},
-          ${locationCategory || null}, ${environmentType || null}, ${motionType || null},
-          ${weather || null}, ${temperature || null}, ${humidity || null},
-          ${bloodPressureSystolic || null}, ${bloodPressureDiastolic || null}, 
-          ${bodyTemperature || null}, ${locationName || null}
-        )
-        RETURNING *
-      `
-    })
+        body_temperature: bodyTemperature,
+        environment_type: environmentType,
+        motion_type:      motionType,
+        location_category: locationCategory,
+        location_name:    locationName,
+        weather,
+        temperature,
+        humidity,
 
-    if (error) {
-      return NextResponse.json({ error }, { status: 500 })
-    }
-
-    return NextResponse.json({ success: true, data })
-  } catch (error) {
-    console.error("Error in health-data API:", error)
-    return NextResponse.json({ error: "Failed to process request" }, { status: 500 })
+        activity_energy: activityEnergy,
+        basal_energy:    basalEnergy,
+        flights_climbed: flightsClimbed,
+        sleep_analysis:  sleepAnalysis,
+        exercise_minutes: exerciseMinutes,
+        stand_hours:     standHours,
+        workout_count:   workoutCount,
+        cycling_distance: cyclingDistance,
+        state_of_mind:   stateOfMind,
+        time_asleep:     timeAsleep,
+        rem_sleep:       remSleep,
+        core_sleep:      coreSleep,
+        deep_sleep:      deepSleep,
+        awake_time:      awakeTime,
+      },
+    });
+    return NextResponse.json({ success: true, data: rec });
+  } catch (error: any) {
+    console.error(error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
 
-export async function GET(request: NextRequest) {
-  const userId = request.nextUrl.searchParams.get("userId")
-  const limit = Number.parseInt(request.nextUrl.searchParams.get("limit") || "100")
+export async function GET(req: NextRequest) {
+  const userId = req.nextUrl.searchParams.get('userId');
+  const limit  = Number(req.nextUrl.searchParams.get('limit') || '100');
 
   if (!userId) {
-    return NextResponse.json({ error: "User ID is required" }, { status: 400 })
+    return NextResponse.json({ error: 'userId is required' }, { status: 400 });
   }
 
-  const { data, error } = await executeQuery(async () => {
-    return await sql`
-      SELECT * FROM health_data 
-      WHERE user_id = ${userId}
-      ORDER BY timestamp DESC
-      LIMIT ${limit}
-    `
-  })
-
-  if (error) {
-    return NextResponse.json({ error }, { status: 500 })
+  try {
+    const rows = await prisma.health_data.findMany({
+      where: { user_id: userId },
+      orderBy: { timestamp: 'desc' },
+      take: limit,
+    });
+    return NextResponse.json({ success: true, data: rows });
+  } catch (error: any) {
+    console.error(error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
-
-  return NextResponse.json(data)
 }

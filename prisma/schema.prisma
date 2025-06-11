@@ -1,0 +1,129 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../lib/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model health_data {
+  id                       Int       @id @default(autoincrement())
+  user_id                  String?   @db.VarChar(255)
+  timestamp                DateTime? @default(now()) @db.Timestamptz(6)
+  heart_rate               Int?
+  oxygen_saturation        Decimal?  @db.Decimal(5, 2)
+  steps                    Int?
+  distance                 Decimal?  @db.Decimal(10, 2)
+  calories_burned          Int?
+  blood_pressure_systolic  Int?
+  blood_pressure_diastolic Int?
+  body_temperature         Decimal?  @db.Decimal(4, 1)
+  environment_type         String?   @db.VarChar(50)
+  motion_type              String?   @db.VarChar(50)
+  location_name            String?
+  max_heart_rate           Int?
+  min_heart_rate           Int?
+  heart_rate_variability   Float?
+  respiratory_rate         Float?
+  walking_heart_rate_avg   Int?
+  activity_energy          Int?
+  basal_energy             Int?
+  flights_climbed          Int?
+  sleep_analysis           String?   @db.VarChar(255)
+  exercise_minutes         Int?
+  stand_hours              Int?
+  workout_count            Int?
+  cycling_distance         Int?
+  state_of_mind            String?   @db.VarChar(255)
+  time_asleep              Int?
+  rem_sleep                Int?
+  core_sleep               Int?
+  deep_sleep               Int?
+  awake_time               Int?
+  location_category        String?   @db.VarChar(255)
+  weather                  String?   @db.VarChar(255)
+  temperature              Float?
+  humidity                 String?   @db.VarChar(255)
+  users                    users?    @relation(fields: [user_id], references: [user_id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([user_id, timestamp], map: "idx_health_data_user_timestamp")
+}
+
+model menstrual_data {
+  id                 Int       @id @default(autoincrement())
+  user_id            String?   @db.VarChar(255)
+  cycle_date         DateTime? @db.Date
+  flow_level         Int?
+  symptoms           String[]
+  mood               String?   @db.VarChar(50)
+  notes              String?
+  created_at         DateTime? @default(now()) @db.Timestamptz(6)
+  is_pregnant        Boolean?  @default(false)
+  pregnancy_duration String?   @db.VarChar(255)
+  users              users?    @relation(fields: [user_id], references: [user_id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([user_id, cycle_date], map: "idx_menstrual_data_user_date")
+}
+
+model offline_queue {
+  id         Int       @id @default(autoincrement())
+  user_id    String?   @db.VarChar(255)
+  table_name String?   @db.VarChar(50)
+  data       Json?
+  created_at DateTime? @default(now()) @db.Timestamptz(6)
+  processed  Boolean?  @default(false)
+  users      users?    @relation(fields: [user_id], references: [user_id], onDelete: NoAction, onUpdate: NoAction)
+}
+
+model questionnaire_data {
+  id                    Int       @id @default(autoincrement())
+  user_id               String?   @db.VarChar(255)
+  timestamp             DateTime? @default(now()) @db.Timestamptz(6)
+  energy_level          Int?
+  stress_level          Int?
+  sleep_quality         Int?
+  headache              Boolean?
+  muscle_pain           Boolean?
+  dizziness             Boolean?
+  nausea                Boolean?
+  notes                 String?
+  submission_date       DateTime? @db.Timestamptz(6)
+  is_submitted          Boolean?  @default(false)
+  completion_status     String?   @default("pending") @db.VarChar(50)
+  questionnaire_version String?   @default("1.0") @db.VarChar(50)
+  data_type             String?   @db.VarChar(50)
+  energy_data_points    Json?
+  average_energy_level  Float?
+  data_point_count      Int?
+  last_energy_level     Int?
+  last_energy_timestamp DateTime? @db.Timestamptz(6)
+  emergency_type        String?   @db.VarChar(50)
+  location_category     String?   @db.VarChar(255)
+  heart_rate            Int?
+  is_active             Boolean?  @default(false)
+  users                 users?    @relation(fields: [user_id], references: [user_id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([data_type], map: "idx_questionnaire_data_data_type")
+  @@index([user_id, timestamp], map: "idx_questionnaire_data_user_timestamp")
+}
+
+model users {
+  user_id            String               @id @db.VarChar(255)
+  name               String?              @db.VarChar(255)
+  sex                String?              @db.VarChar(50)
+  age                Int?
+  height             Decimal?             @db.Decimal(5, 2)
+  weight             Decimal?             @db.Decimal(5, 2)
+  medications        String?
+  created_at         DateTime?            @default(now()) @db.Timestamptz(6)
+  updated_at         DateTime?            @default(now()) @db.Timestamptz(6)
+  legacy_uuid        String?              @db.VarChar(255)
+  health_data        health_data[]
+  menstrual_data     menstrual_data[]
+  offline_queue      offline_queue[]
+  questionnaire_data questionnaire_data[]
+
+  @@index([legacy_uuid], map: "idx_users_legacy_uuid")
+}
