@@ -67,7 +67,6 @@ export async function POST(req: NextRequest) {
         walking_heart_rate_avg: walkingHeartRateAvg,
 
         oxygen_saturation: oxygenSaturation,
-        activity_level:    activityLevel,
         steps,
         distance,
         calories_burned:   caloriesBurned,
