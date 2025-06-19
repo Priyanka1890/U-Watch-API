@@ -174,42 +174,42 @@ export async function POST(request: NextRequest) {
             ${questionnaireVersion || "6.0"},
             
             -- Energy tracking data
-            ${energyLevelsJson},
-            ${energyGraphJson},
-            ${refreshmentLevel !== undefined ? refreshmentLevel : null},
+            ${energyLevelsJson}::jsonb,
+            ${energyGraphJson}::jsonb,
+            ${refreshmentLevel !== undefined && refreshmentLevel !== null ? Number(refreshmentLevel) : null},
             
             -- Fatigue and crash data
-            ${hasExcessiveFatigue !== undefined ? hasExcessiveFatigue : null},
+            ${hasExcessiveFatigue !== undefined ? Boolean(hasExcessiveFatigue) : false},
             ${crashTimeOfDay || null},
             ${crashDuration || null},
-            ${crashDurationNumber !== undefined ? crashDurationNumber : null},
+            ${crashDurationNumber !== undefined && crashDurationNumber !== null ? Number(crashDurationNumber) : null},
             ${crashTrigger || null},
             ${crashTriggerDescription || null},
             ${fatigueDate ? new Date(fatigueDate) : null},
             ${fatigueDescription || null},
             
             -- Symptom data
-            ${selectedBodyAreasJson},
-            ${selectedSymptomsJson},
+            ${selectedBodyAreasJson}::jsonb,
+            ${selectedSymptomsJson}::jsonb,
             ${otherSymptomsDescription || null},
             
             -- Sleep data
             ${sleepQuality || null},
-            ${sleepDuration !== undefined ? sleepDuration : null},
-            ${sleepStagesJson},
+            ${sleepDuration !== undefined && sleepDuration !== null ? Number(sleepDuration) : null},
+            ${sleepStagesJson}::jsonb,
             ${sleepAssessment || null},
-            ${healthKitAuthorized !== undefined ? healthKitAuthorized : null},
+            ${healthKitAuthorized !== undefined ? Boolean(healthKitAuthorized) : false},
             
             -- Legacy fields for backward compatibility
-            ${energyLevel !== undefined ? energyLevel : null},
-            ${stressLevel !== undefined ? stressLevel : null},
-            ${headache !== undefined ? headache : null},
-            ${musclePain !== undefined ? musclePain : null},
-            ${dizziness !== undefined ? dizziness : null},
-            ${nausea !== undefined ? nausea : null},
+            ${energyLevel !== undefined && energyLevel !== null ? Number(energyLevel) : null},
+            ${stressLevel !== undefined && stressLevel !== null ? Number(stressLevel) : null},
+            ${headache !== undefined ? Boolean(headache) : false},
+            ${musclePain !== undefined ? Boolean(musclePain) : false},
+            ${dizziness !== undefined ? Boolean(dizziness) : false},
+            ${nausea !== undefined ? Boolean(nausea) : false},
             ${notes || null}
           )
-          RETURNING id, user_id, timestamp, data_type
+          RETURNING id, user_id, timestamp, data_type, completion_status
         `
 
         console.log("✅ Successfully inserted questionnaire data, ID:", result[0]?.id)
@@ -235,16 +235,16 @@ export async function POST(request: NextRequest) {
             ${userId}, 
             ${timestamp ? new Date(timestamp) : new Date()}, 
             ${dataType},
-            ${energyDataPoints ? JSON.stringify(energyDataPoints) : null},
-            ${averageEnergyLevel !== undefined ? averageEnergyLevel : null},
-            ${dataPointCount !== undefined ? dataPointCount : null},
-            ${lastEnergyLevel !== undefined ? lastEnergyLevel : null},
+            ${energyDataPoints ? JSON.stringify(energyDataPoints) : "[]"}::jsonb,
+            ${averageEnergyLevel !== undefined && averageEnergyLevel !== null ? Number(averageEnergyLevel) : null},
+            ${dataPointCount !== undefined && dataPointCount !== null ? Number(dataPointCount) : null},
+            ${lastEnergyLevel !== undefined && lastEnergyLevel !== null ? Number(lastEnergyLevel) : null},
             ${lastEnergyTimestamp ? new Date(lastEnergyTimestamp) : null},
             ${notes || null},
             ${completionStatus || "completed"},
             ${questionnaireVersion || "6.0"}
           )
-          RETURNING *
+          RETURNING id, user_id, timestamp, data_type
         `
       } else if (dataType === "emergency") {
         console.log("💾 Inserting emergency data...")
@@ -268,13 +268,13 @@ export async function POST(request: NextRequest) {
             ${dataType},
             ${emergencyType || null},
             ${locationCategory || null},
-            ${heartRate !== undefined ? heartRate : null},
-            ${isActive !== undefined ? isActive : null},
+            ${heartRate !== undefined && heartRate !== null ? Number(heartRate) : null},
+            ${isActive !== undefined ? Boolean(isActive) : false},
             ${notes || null},
             ${completionStatus || "completed"},
             ${questionnaireVersion || "6.0"}
           )
-          RETURNING *
+          RETURNING id, user_id, timestamp, data_type
         `
       } else {
         console.log("💾 Inserting legacy questionnaire data...")
