@@ -53,6 +53,23 @@ export async function POST(request: NextRequest) {
       healthKitAuthorized,
     } = body
 
+    // Enhanced validation for comprehensive questionnaire data
+    if (dataType === "completeQuestionnaire") {
+      console.log("Processing complete questionnaire with data:", {
+        userId,
+        energyLevelsCount: energyLevelsAtTimes ? Object.keys(energyLevelsAtTimes).length : 0,
+        graphPointsCount: energyGraphPoints ? energyGraphPoints.length : 0,
+        hasExcessiveFatigue,
+        crashDuration,
+        sleepQuality,
+      })
+
+      // Validate required fields for complete questionnaire
+      if (!energyLevelsAtTimes && !energyGraphPoints) {
+        return NextResponse.json({ error: "Energy data is required for complete questionnaire" }, { status: 400 })
+      }
+    }
+
     // Validate required fields
     if (!userId) {
       return NextResponse.json({ error: "User ID is required" }, { status: 400 })
@@ -274,9 +291,25 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: true, data })
   } catch (error) {
     console.error("Error in questionnaire-data API:", error)
+    let body
+    try {
+      body = await request.json()
+    } catch (parseError) {
+      console.error("Error parsing request body:", parseError)
+      body = {}
+    }
+    console.error("Request body:", JSON.stringify(body, null, 2))
+
+    // Log specific error details
+    if (error instanceof Error) {
+      console.error("Error message:", error.message)
+      console.error("Error stack:", error.stack)
+    }
+
     return NextResponse.json(
       {
         error: error instanceof Error ? error.message : "Failed to process request",
+        details: "Check server logs for more information",
       },
       { status: 500 },
     )
