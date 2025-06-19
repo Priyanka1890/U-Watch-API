@@ -4,6 +4,9 @@ import { sql, executeQuery } from "@/lib/db"
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
+    console.log("📥 Received request body keys:", Object.keys(body))
+    console.log("📊 Request body size:", JSON.stringify(body).length, "bytes")
+
     const {
       userId,
       timestamp,
@@ -53,9 +56,11 @@ export async function POST(request: NextRequest) {
       healthKitAuthorized,
     } = body
 
+    console.log("🔍 Processing data for user:", userId, "dataType:", dataType)
+
     // Enhanced validation for comprehensive questionnaire data
     if (dataType === "completeQuestionnaire") {
-      console.log("Processing complete questionnaire with data:", {
+      console.log("✅ Processing complete questionnaire with data:", {
         userId,
         energyLevelsCount: energyLevelsAtTimes ? Object.keys(energyLevelsAtTimes).length : 0,
         graphPointsCount: energyGraphPoints ? energyGraphPoints.length : 0,
@@ -66,29 +71,54 @@ export async function POST(request: NextRequest) {
 
       // Validate required fields for complete questionnaire
       if (!energyLevelsAtTimes && !energyGraphPoints) {
+        console.log("❌ Validation failed: Missing energy data")
         return NextResponse.json({ error: "Energy data is required for complete questionnaire" }, { status: 400 })
       }
     }
 
     // Validate required fields
     if (!userId) {
+      console.log("❌ Validation failed: Missing userId")
       return NextResponse.json({ error: "User ID is required" }, { status: 400 })
     }
 
+    console.log("🔄 Starting database transaction...")
+
     const { data, error } = await executeQuery(async () => {
       // Check if user exists
+      console.log("👤 Checking if user exists:", userId)
       const existingUser = await sql`
         SELECT user_id FROM users WHERE user_id = ${userId}
       `
 
       if (existingUser.length === 0) {
-        throw new Error("User not found")
+        console.log("❌ User not found:", userId)
+        throw new Error(`User not found: ${userId}`)
       }
+
+      console.log("✅ User found, proceeding with data insertion")
 
       // Handle different data types
       if (dataType === "completeQuestionnaire" || dataType === "dailyQuestionnaire") {
+        console.log("💾 Inserting comprehensive questionnaire data...")
+
+        // Safely process JSON fields
+        const energyLevelsJson = energyLevelsAtTimes ? JSON.stringify(energyLevelsAtTimes) : null
+        const energyGraphJson = energyGraphPoints ? JSON.stringify(energyGraphPoints) : null
+        const selectedBodyAreasJson = selectedBodyAreas ? JSON.stringify(selectedBodyAreas) : null
+        const selectedSymptomsJson = selectedSymptoms ? JSON.stringify(selectedSymptoms) : null
+        const sleepStagesJson = sleepStages ? JSON.stringify(sleepStages) : null
+
+        console.log("📝 Prepared JSON fields:", {
+          energyLevelsJson: energyLevelsJson ? "✅" : "❌",
+          energyGraphJson: energyGraphJson ? "✅" : "❌",
+          selectedBodyAreasJson: selectedBodyAreasJson ? "✅" : "❌",
+          selectedSymptomsJson: selectedSymptomsJson ? "✅" : "❌",
+          sleepStagesJson: sleepStagesJson ? "✅" : "❌",
+        })
+
         // Insert comprehensive questionnaire data
-        return await sql`
+        const result = await sql`
           INSERT INTO questionnaire_data (
             user_id, 
             timestamp, 
@@ -144,44 +174,48 @@ export async function POST(request: NextRequest) {
             ${questionnaireVersion || "6.0"},
             
             -- Energy tracking data
-            ${energyLevelsAtTimes ? JSON.stringify(energyLevelsAtTimes) : null},
-            ${energyGraphPoints ? JSON.stringify(energyGraphPoints) : null},
-            ${refreshmentLevel || null},
+            ${energyLevelsJson},
+            ${energyGraphJson},
+            ${refreshmentLevel !== undefined ? refreshmentLevel : null},
             
             -- Fatigue and crash data
-            ${hasExcessiveFatigue || false},
+            ${hasExcessiveFatigue !== undefined ? hasExcessiveFatigue : null},
             ${crashTimeOfDay || null},
             ${crashDuration || null},
-            ${crashDurationNumber || null},
+            ${crashDurationNumber !== undefined ? crashDurationNumber : null},
             ${crashTrigger || null},
             ${crashTriggerDescription || null},
             ${fatigueDate ? new Date(fatigueDate) : null},
             ${fatigueDescription || null},
             
             -- Symptom data
-            ${selectedBodyAreas ? JSON.stringify(selectedBodyAreas) : null},
-            ${selectedSymptoms ? JSON.stringify(selectedSymptoms) : null},
+            ${selectedBodyAreasJson},
+            ${selectedSymptomsJson},
             ${otherSymptomsDescription || null},
             
             -- Sleep data
             ${sleepQuality || null},
-            ${sleepDuration || null},
-            ${sleepStages ? JSON.stringify(sleepStages) : null},
+            ${sleepDuration !== undefined ? sleepDuration : null},
+            ${sleepStagesJson},
             ${sleepAssessment || null},
-            ${healthKitAuthorized || false},
+            ${healthKitAuthorized !== undefined ? healthKitAuthorized : null},
             
             -- Legacy fields for backward compatibility
-            ${energyLevel || null},
-            ${stressLevel || null},
-            ${headache || false},
-            ${musclePain || false},
-            ${dizziness || false},
-            ${nausea || false},
+            ${energyLevel !== undefined ? energyLevel : null},
+            ${stressLevel !== undefined ? stressLevel : null},
+            ${headache !== undefined ? headache : null},
+            ${musclePain !== undefined ? musclePain : null},
+            ${dizziness !== undefined ? dizziness : null},
+            ${nausea !== undefined ? nausea : null},
             ${notes || null}
           )
-          RETURNING *
+          RETURNING id, user_id, timestamp, data_type
         `
+
+        console.log("✅ Successfully inserted questionnaire data, ID:", result[0]?.id)
+        return result
       } else if (dataType === "energyGraph" || dataType === "energyReading") {
+        console.log("💾 Inserting energy graph data...")
         // Insert energy graph data
         return await sql`
           INSERT INTO questionnaire_data (
@@ -201,10 +235,10 @@ export async function POST(request: NextRequest) {
             ${userId}, 
             ${timestamp ? new Date(timestamp) : new Date()}, 
             ${dataType},
-            ${JSON.stringify(energyDataPoints || [])},
-            ${averageEnergyLevel || null},
-            ${dataPointCount || null},
-            ${lastEnergyLevel || null},
+            ${energyDataPoints ? JSON.stringify(energyDataPoints) : null},
+            ${averageEnergyLevel !== undefined ? averageEnergyLevel : null},
+            ${dataPointCount !== undefined ? dataPointCount : null},
+            ${lastEnergyLevel !== undefined ? lastEnergyLevel : null},
             ${lastEnergyTimestamp ? new Date(lastEnergyTimestamp) : null},
             ${notes || null},
             ${completionStatus || "completed"},
@@ -213,6 +247,7 @@ export async function POST(request: NextRequest) {
           RETURNING *
         `
       } else if (dataType === "emergency") {
+        console.log("💾 Inserting emergency data...")
         // Insert emergency data
         return await sql`
           INSERT INTO questionnaire_data (
@@ -233,8 +268,8 @@ export async function POST(request: NextRequest) {
             ${dataType},
             ${emergencyType || null},
             ${locationCategory || null},
-            ${heartRate || null},
-            ${isActive || false},
+            ${heartRate !== undefined ? heartRate : null},
+            ${isActive !== undefined ? isActive : null},
             ${notes || null},
             ${completionStatus || "completed"},
             ${questionnaireVersion || "6.0"}
@@ -242,6 +277,7 @@ export async function POST(request: NextRequest) {
           RETURNING *
         `
       } else {
+        console.log("💾 Inserting legacy questionnaire data...")
         // Insert legacy questionnaire data for backward compatibility
         return await sql`
           INSERT INTO questionnaire_data (
@@ -266,14 +302,14 @@ export async function POST(request: NextRequest) {
             ${timestamp ? new Date(timestamp) : new Date()}, 
             ${dataType || "dailyQuestionnaire"},
             ${submissionDate ? new Date(submissionDate) : null},
-            ${isSubmitted || false},
-            ${energyLevel || null}, 
-            ${stressLevel || null}, 
+            ${isSubmitted !== undefined ? isSubmitted : false},
+            ${energyLevel !== undefined ? energyLevel : null}, 
+            ${stressLevel !== undefined ? stressLevel : null}, 
             ${sleepQuality || null},
-            ${headache || false}, 
-            ${musclePain || false}, 
-            ${dizziness || false}, 
-            ${nausea || false}, 
+            ${headache !== undefined ? headache : null}, 
+            ${musclePain !== undefined ? musclePain : null}, 
+            ${dizziness !== undefined ? dizziness : null}, 
+            ${nausea !== undefined ? nausea : null}, 
             ${notes || null},
             ${completionStatus || "pending"},
             ${questionnaireVersion || "1.0"}
@@ -284,32 +320,57 @@ export async function POST(request: NextRequest) {
     })
 
     if (error) {
-      console.error("Database error:", error)
-      return NextResponse.json({ error: error.message || "Database operation failed" }, { status: 500 })
+      console.error("💥 Database error details:", {
+        message: error.message,
+        stack: error.stack,
+        cause: error.cause,
+      })
+      return NextResponse.json(
+        {
+          error: "Database operation failed",
+          details: error.message,
+          timestamp: new Date().toISOString(),
+        },
+        { status: 500 },
+      )
     }
 
-    return NextResponse.json({ success: true, data })
+    console.log("🎉 Successfully processed questionnaire data")
+    return NextResponse.json({
+      success: true,
+      data: {
+        id: data[0]?.id,
+        userId: data[0]?.user_id,
+        timestamp: data[0]?.timestamp,
+        dataType: data[0]?.data_type,
+      },
+    })
   } catch (error) {
-    console.error("Error in questionnaire-data API:", error)
+    console.error("💥 Critical error in questionnaire-data API:", {
+      message: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+      timestamp: new Date().toISOString(),
+    })
+
     let body
     try {
       body = await request.json()
+      console.error("📋 Request body that caused error:", {
+        userId: body.userId,
+        dataType: body.dataType,
+        timestamp: body.timestamp,
+        bodySize: JSON.stringify(body).length,
+      })
     } catch (parseError) {
-      console.error("Error parsing request body:", parseError)
+      console.error("💥 Additional error parsing request body:", parseError)
       body = {}
-    }
-    console.error("Request body:", JSON.stringify(body, null, 2))
-
-    // Log specific error details
-    if (error instanceof Error) {
-      console.error("Error message:", error.message)
-      console.error("Error stack:", error.stack)
     }
 
     return NextResponse.json(
       {
         error: error instanceof Error ? error.message : "Failed to process request",
         details: "Check server logs for more information",
+        timestamp: new Date().toISOString(),
       },
       { status: 500 },
     )
