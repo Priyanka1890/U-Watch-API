@@ -54,19 +54,68 @@ export async function POST(request: NextRequest) {
       sleepStages,
       sleepAssessment,
       healthKitAuthorized,
+      // NEW FIELDS - Missing from original API
+      testingMode,
+      simulatedDay,
+      isInContinuingCrash,
+      crashContinuationAnswer,
+      crashSubTriggers, // Note: iOS sends crashSubTriggers, not selectedSubTriggers
+      wakeUpHour,
+      sleepQualitySlider, // iOS might send this instead of sleepQuality
     } = body
 
     console.log("🔍 Processing data for user:", userId, "dataType:", dataType)
+    
+    // Enhanced data structure logging
+    console.log("📊 Complete request data structure:", {
+      userId,
+      dataType,
+      testingMode,
+      simulatedDay,
+      energyLevelsAtTimesType: typeof energyLevelsAtTimes,
+      energyLevelsCount: energyLevelsAtTimes ? Object.keys(energyLevelsAtTimes).length : 0,
+      energyGraphPointsType: typeof energyGraphPoints,
+      energyGraphPointsLength: energyGraphPoints ? energyGraphPoints.length : 0,
+      hasExcessiveFatigue,
+      crashTimeOfDay,
+      selectedBodyAreas: selectedBodyAreas?.length,
+      selectedSymptoms: selectedSymptoms?.length,
+      crashSubTriggers: crashSubTriggers?.length,
+      wakeUpHour,
+      sleepQualitySlider,
+      isInContinuingCrash,
+      crashContinuationAnswer,
+      // Log any unexpected fields
+      unexpectedFields: Object.keys(body).filter(key => ![
+        'userId', 'timestamp', 'dataType', 'submissionDate', 'isSubmitted', 
+        'energyLevel', 'stressLevel', 'sleepQuality', 'headache', 'musclePain', 
+        'dizziness', 'nausea', 'notes', 'completionStatus', 'questionnaireVersion',
+        'energyDataPoints', 'averageEnergyLevel', 'dataPointCount', 'lastEnergyLevel', 
+        'lastEnergyTimestamp', 'emergencyType', 'locationCategory', 'heartRate', 
+        'isActive', 'energyLevelsAtTimes', 'energyGraphPoints', 'refreshmentLevel',
+        'hasExcessiveFatigue', 'crashTimeOfDay', 'selectedBodyAreas', 'selectedSymptoms',
+        'otherSymptomsDescription', 'crashDuration', 'crashDurationNumber', 'crashTrigger',
+        'crashTriggerDescription', 'fatigueDate', 'fatigueDescription', 'sleepDuration',
+        'sleepStages', 'sleepAssessment', 'healthKitAuthorized', 'testingMode',
+        'simulatedDay', 'isInContinuingCrash', 'crashContinuationAnswer', 
+        'crashSubTriggers', 'wakeUpHour', 'sleepQualitySlider'
+      ].includes(key))
+    })
 
     // Enhanced validation for comprehensive questionnaire data
     if (dataType === "completeQuestionnaire") {
       console.log("✅ Processing complete questionnaire with data:", {
         userId,
+        testingMode,
+        simulatedDay,
         energyLevelsCount: energyLevelsAtTimes ? Object.keys(energyLevelsAtTimes).length : 0,
         graphPointsCount: energyGraphPoints ? energyGraphPoints.length : 0,
         hasExcessiveFatigue,
         crashDuration,
-        sleepQuality,
+        sleepQuality: sleepQuality || sleepQualitySlider,
+        wakeUpHour,
+        isInContinuingCrash,
+        crashContinuationAnswer,
       })
 
       // Validate required fields for complete questionnaire
@@ -108,6 +157,7 @@ export async function POST(request: NextRequest) {
         const selectedBodyAreasJson = selectedBodyAreas ? JSON.stringify(selectedBodyAreas) : null
         const selectedSymptomsJson = selectedSymptoms ? JSON.stringify(selectedSymptoms) : null
         const sleepStagesJson = sleepStages ? JSON.stringify(sleepStages) : null
+        const crashSubTriggersJson = crashSubTriggers ? JSON.stringify(crashSubTriggers) : null
 
         console.log("📝 Prepared JSON fields:", {
           energyLevelsJson: energyLevelsJson ? "✅" : "❌",
@@ -115,7 +165,11 @@ export async function POST(request: NextRequest) {
           selectedBodyAreasJson: selectedBodyAreasJson ? "✅" : "❌",
           selectedSymptomsJson: selectedSymptomsJson ? "✅" : "❌",
           sleepStagesJson: sleepStagesJson ? "✅" : "❌",
+          crashSubTriggersJson: crashSubTriggersJson ? "✅" : "❌",
         })
+
+        // Handle sleep quality - iOS might send sleepQualitySlider instead of sleepQuality
+        const finalSleepQuality = sleepQuality || (sleepQualitySlider !== undefined ? String(sleepQualitySlider) : null)
 
         // Insert comprehensive questionnaire data
         const result = await sql`
@@ -128,10 +182,15 @@ export async function POST(request: NextRequest) {
             completion_status,
             questionnaire_version,
             
+            -- Testing/Debug fields
+            testing_mode,
+            simulated_day,
+            
             -- Energy tracking data
             energy_levels_at_times,
             energy_graph_points,
             refreshment_level,
+            wake_up_hour,
             
             -- Fatigue and crash data
             has_excessive_fatigue,
@@ -139,9 +198,12 @@ export async function POST(request: NextRequest) {
             crash_duration,
             crash_duration_number,
             crash_trigger,
+            crash_sub_triggers,
             crash_trigger_description,
             fatigue_date,
             fatigue_description,
+            is_in_continuing_crash,
+            crash_continuation_answer,
             
             -- Symptom data
             selected_body_areas,
@@ -173,10 +235,15 @@ export async function POST(request: NextRequest) {
             ${completionStatus || "completed"},
             ${questionnaireVersion || "6.0"},
             
+            -- Testing/Debug fields
+            ${testingMode !== undefined ? Boolean(testingMode) : false},
+            ${simulatedDay !== undefined && simulatedDay !== null ? Number(simulatedDay) : null},
+            
             -- Energy tracking data
             ${energyLevelsJson}::jsonb,
             ${energyGraphJson}::jsonb,
             ${refreshmentLevel !== undefined && refreshmentLevel !== null ? Number(refreshmentLevel) : null},
+            ${wakeUpHour !== undefined && wakeUpHour !== null ? Number(wakeUpHour) : null},
             
             -- Fatigue and crash data
             ${hasExcessiveFatigue !== undefined ? Boolean(hasExcessiveFatigue) : false},
@@ -184,9 +251,12 @@ export async function POST(request: NextRequest) {
             ${crashDuration || null},
             ${crashDurationNumber !== undefined && crashDurationNumber !== null ? Number(crashDurationNumber) : null},
             ${crashTrigger || null},
+            ${crashSubTriggersJson}::jsonb,
             ${crashTriggerDescription || null},
             ${fatigueDate ? new Date(fatigueDate) : null},
             ${fatigueDescription || null},
+            ${isInContinuingCrash !== undefined ? Boolean(isInContinuingCrash) : false},
+            ${crashContinuationAnswer !== undefined ? Boolean(crashContinuationAnswer) : false},
             
             -- Symptom data
             ${selectedBodyAreasJson}::jsonb,
@@ -194,7 +264,7 @@ export async function POST(request: NextRequest) {
             ${otherSymptomsDescription || null},
             
             -- Sleep data
-            ${sleepQuality || null},
+            ${finalSleepQuality || null},
             ${sleepDuration !== undefined && sleepDuration !== null ? Number(sleepDuration) : null},
             ${sleepStagesJson}::jsonb,
             ${sleepAssessment || null},
@@ -229,7 +299,9 @@ export async function POST(request: NextRequest) {
             last_energy_timestamp, 
             notes,
             completion_status,
-            questionnaire_version
+            questionnaire_version,
+            testing_mode,
+            simulated_day
           )
           VALUES (
             ${userId}, 
@@ -242,7 +314,9 @@ export async function POST(request: NextRequest) {
             ${lastEnergyTimestamp ? new Date(lastEnergyTimestamp) : null},
             ${notes || null},
             ${completionStatus || "completed"},
-            ${questionnaireVersion || "6.0"}
+            ${questionnaireVersion || "6.0"},
+            ${testingMode !== undefined ? Boolean(testingMode) : false},
+            ${simulatedDay !== undefined && simulatedDay !== null ? Number(simulatedDay) : null}
           )
           RETURNING id, user_id, timestamp, data_type
         `
@@ -260,7 +334,9 @@ export async function POST(request: NextRequest) {
             is_active, 
             notes,
             completion_status,
-            questionnaire_version
+            questionnaire_version,
+            testing_mode,
+            simulated_day
           )
           VALUES (
             ${userId}, 
@@ -272,7 +348,9 @@ export async function POST(request: NextRequest) {
             ${isActive !== undefined ? Boolean(isActive) : false},
             ${notes || null},
             ${completionStatus || "completed"},
-            ${questionnaireVersion || "6.0"}
+            ${questionnaireVersion || "6.0"},
+            ${testingMode !== undefined ? Boolean(testingMode) : false},
+            ${simulatedDay !== undefined && simulatedDay !== null ? Number(simulatedDay) : null}
           )
           RETURNING id, user_id, timestamp, data_type
         `
@@ -295,7 +373,9 @@ export async function POST(request: NextRequest) {
             nausea, 
             notes, 
             completion_status, 
-            questionnaire_version
+            questionnaire_version,
+            testing_mode,
+            simulated_day
           )
           VALUES (
             ${userId}, 
@@ -312,7 +392,9 @@ export async function POST(request: NextRequest) {
             ${nausea !== undefined ? nausea : null}, 
             ${notes || null},
             ${completionStatus || "pending"},
-            ${questionnaireVersion || "1.0"}
+            ${questionnaireVersion || "1.0"},
+            ${testingMode !== undefined ? Boolean(testingMode) : false},
+            ${simulatedDay !== undefined && simulatedDay !== null ? Number(simulatedDay) : null}
           )
           RETURNING *
         `
@@ -324,11 +406,14 @@ export async function POST(request: NextRequest) {
         message: error.message,
         stack: error.stack,
         cause: error.cause,
+        errorName: error.name,
+        errorCode: error.code,
       })
       return NextResponse.json(
         {
           error: "Database operation failed",
           details: error.message,
+          errorType: error.name || "DatabaseError",
           timestamp: new Date().toISOString(),
         },
         { status: 500 },
@@ -349,6 +434,7 @@ export async function POST(request: NextRequest) {
     console.error("💥 Critical error in questionnaire-data API:", {
       message: error instanceof Error ? error.message : String(error),
       stack: error instanceof Error ? error.stack : undefined,
+      name: error instanceof Error ? error.name : undefined,
       timestamp: new Date().toISOString(),
     })
 
@@ -360,6 +446,8 @@ export async function POST(request: NextRequest) {
         dataType: body.dataType,
         timestamp: body.timestamp,
         bodySize: JSON.stringify(body).length,
+        testingMode: body.testingMode,
+        simulatedDay: body.simulatedDay,
       })
     } catch (parseError) {
       console.error("💥 Additional error parsing request body:", parseError)
@@ -377,6 +465,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
+// GET and PUT methods remain the same as your original
 export async function GET(request: NextRequest) {
   const userId = request.nextUrl.searchParams.get("userId")
   const dataType = request.nextUrl.searchParams.get("dataType")
@@ -440,7 +529,6 @@ export async function GET(request: NextRequest) {
   return NextResponse.json(data)
 }
 
-// Add analytics endpoint for questionnaire insights
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json()
@@ -458,7 +546,8 @@ export async function PUT(request: NextRequest) {
               DATE(timestamp) as date,
               AVG(refreshment_level) as avg_refreshment,
               COUNT(*) as submission_count,
-              AVG(sleep_duration) as avg_sleep_duration
+              AVG(sleep_duration) as avg_sleep_duration,
+              AVG(wake_up_hour) as avg_wake_up_hour
             FROM questionnaire_data 
             WHERE user_id = ${userId} 
             AND data_type IN ('completeQuestionnaire', 'dailyQuestionnaire')
@@ -474,13 +563,14 @@ export async function PUT(request: NextRequest) {
               selected_body_areas,
               crash_duration,
               crash_trigger,
+              crash_sub_triggers,
               COUNT(*) as frequency
             FROM questionnaire_data 
             WHERE user_id = ${userId} 
             AND data_type IN ('completeQuestionnaire', 'dailyQuestionnaire')
             AND selected_symptoms IS NOT NULL
             AND timestamp >= NOW() - INTERVAL '30 days'
-            GROUP BY selected_symptoms, selected_body_areas, crash_duration, crash_trigger
+            GROUP BY selected_symptoms, selected_body_areas, crash_duration, crash_trigger, crash_sub_triggers
             ORDER BY frequency DESC
           `
 
@@ -491,14 +581,33 @@ export async function PUT(request: NextRequest) {
               sleep_duration,
               refreshment_level,
               has_excessive_fatigue,
+              wake_up_hour,
               COUNT(*) as count
             FROM questionnaire_data 
             WHERE user_id = ${userId} 
             AND data_type IN ('completeQuestionnaire', 'dailyQuestionnaire')
             AND sleep_quality IS NOT NULL
             AND timestamp >= NOW() - INTERVAL '30 days'
-            GROUP BY sleep_quality, sleep_duration, refreshment_level, has_excessive_fatigue
+            GROUP BY sleep_quality, sleep_duration, refreshment_level, has_excessive_fatigue, wake_up_hour
             ORDER BY count DESC
+          `
+
+        case "crashAnalysis":
+          return await sql`
+            SELECT 
+              has_excessive_fatigue,
+              is_in_continuing_crash,
+              crash_continuation_answer,
+              crash_time_of_day,
+              crash_trigger,
+              crash_sub_triggers,
+              COUNT(*) as frequency
+            FROM questionnaire_data 
+            WHERE user_id = ${userId} 
+            AND data_type IN ('completeQuestionnaire', 'dailyQuestionnaire')
+            AND timestamp >= NOW() - INTERVAL '30 days'
+            GROUP BY has_excessive_fatigue, is_in_continuing_crash, crash_continuation_answer, crash_time_of_day, crash_trigger, crash_sub_triggers
+            ORDER BY frequency DESC
           `
 
         default:
