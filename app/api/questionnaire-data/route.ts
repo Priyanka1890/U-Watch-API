@@ -62,6 +62,9 @@ export async function POST(request: NextRequest) {
       crashSubTriggers, // Note: iOS sends crashSubTriggers, not selectedSubTriggers
       wakeUpHour,
       sleepQualitySlider, // iOS might send this instead of sleepQuality
+      // Additional fields from iOS app analysis
+      originalDate,
+      submittedDate,
     } = body
 
     console.log("🔍 Processing data for user:", userId, "dataType:", dataType)
@@ -98,7 +101,7 @@ export async function POST(request: NextRequest) {
         'crashTriggerDescription', 'fatigueDate', 'fatigueDescription', 'sleepDuration',
         'sleepStages', 'sleepAssessment', 'healthKitAuthorized', 'testingMode',
         'simulatedDay', 'isInContinuingCrash', 'crashContinuationAnswer', 
-        'crashSubTriggers', 'wakeUpHour', 'sleepQualitySlider'
+        'crashSubTriggers', 'wakeUpHour', 'sleepQualitySlider', 'originalDate', 'submittedDate'
       ].includes(key))
     })
 
@@ -134,21 +137,25 @@ export async function POST(request: NextRequest) {
     console.log("🔄 Starting database transaction...")
 
     const { data, error } = await executeQuery(async () => {
-      // Check if user exists
-      console.log("👤 Checking if user exists:", userId)
-      const existingUser = await sql`
+      // Check if user exists - Create user if doesn't exist
+      console.log("👤 Checking/creating user:", userId)
+      let existingUser = await sql`
         SELECT user_id FROM users WHERE user_id = ${userId}
       `
 
       if (existingUser.length === 0) {
-        console.log("❌ User not found:", userId)
-        throw new Error(`User not found: ${userId}`)
+        console.log("👤 User not found, creating new user:", userId)
+        await sql`
+          INSERT INTO users (user_id, created_at, updated_at)
+          VALUES (${userId}, NOW(), NOW())
+        `
+        console.log("✅ User created successfully")
+      } else {
+        console.log("✅ User found, proceeding with data insertion")
       }
 
-      console.log("✅ User found, proceeding with data insertion")
-
       // Handle different data types
-      if (dataType === "completeQuestionnaire" || dataType === "dailyQuestionnaire") {
+      if (dataType === "completeQuestionnaire" || dataType === "dailyQuestionnaire" || dataType === "missedQuestionnaire") {
         console.log("💾 Inserting comprehensive questionnaire data...")
 
         // Safely process JSON fields
@@ -224,7 +231,11 @@ export async function POST(request: NextRequest) {
             muscle_pain,
             dizziness,
             nausea,
-            notes
+            notes,
+            
+            -- Additional tracking fields
+            original_date,
+            submitted_date
           )
           VALUES (
             ${userId}, 
@@ -233,7 +244,7 @@ export async function POST(request: NextRequest) {
             ${submissionDate ? new Date(submissionDate) : new Date()},
             ${isSubmitted !== undefined ? isSubmitted : true},
             ${completionStatus || "completed"},
-            ${questionnaireVersion || "6.0"},
+            ${questionnaireVersion || "7.0"},
             
             -- Testing/Debug fields
             ${testingMode !== undefined ? Boolean(testingMode) : false},
@@ -246,7 +257,7 @@ export async function POST(request: NextRequest) {
             ${wakeUpHour !== undefined && wakeUpHour !== null ? Number(wakeUpHour) : null},
             
             -- Fatigue and crash data
-            ${hasExcessiveFatigue !== undefined ? Boolean(hasExcessiveFatigue) : false},
+            ${hasExcessiveFatigue !== undefined ? Boolean(hasExcessiveFatigue) : null},
             ${crashTimeOfDay || null},
             ${crashDuration || null},
             ${crashDurationNumber !== undefined && crashDurationNumber !== null ? Number(crashDurationNumber) : null},
@@ -256,7 +267,7 @@ export async function POST(request: NextRequest) {
             ${fatigueDate ? new Date(fatigueDate) : null},
             ${fatigueDescription || null},
             ${isInContinuingCrash !== undefined ? Boolean(isInContinuingCrash) : false},
-            ${crashContinuationAnswer !== undefined ? Boolean(crashContinuationAnswer) : false},
+            ${crashContinuationAnswer !== undefined && crashContinuationAnswer !== null ? Boolean(crashContinuationAnswer) : null},
             
             -- Symptom data
             ${selectedBodyAreasJson}::jsonb,
@@ -277,7 +288,11 @@ export async function POST(request: NextRequest) {
             ${musclePain !== undefined ? Boolean(musclePain) : false},
             ${dizziness !== undefined ? Boolean(dizziness) : false},
             ${nausea !== undefined ? Boolean(nausea) : false},
-            ${notes || null}
+            ${notes || null},
+            
+            -- Additional tracking fields
+            ${originalDate ? new Date(originalDate) : null},
+            ${submittedDate ? new Date(submittedDate) : null}
           )
           RETURNING id, user_id, timestamp, data_type, completion_status
         `
@@ -314,7 +329,7 @@ export async function POST(request: NextRequest) {
             ${lastEnergyTimestamp ? new Date(lastEnergyTimestamp) : null},
             ${notes || null},
             ${completionStatus || "completed"},
-            ${questionnaireVersion || "6.0"},
+            ${questionnaireVersion || "7.0"},
             ${testingMode !== undefined ? Boolean(testingMode) : false},
             ${simulatedDay !== undefined && simulatedDay !== null ? Number(simulatedDay) : null}
           )
@@ -348,7 +363,7 @@ export async function POST(request: NextRequest) {
             ${isActive !== undefined ? Boolean(isActive) : false},
             ${notes || null},
             ${completionStatus || "completed"},
-            ${questionnaireVersion || "6.0"},
+            ${questionnaireVersion || "7.0"},
             ${testingMode !== undefined ? Boolean(testingMode) : false},
             ${simulatedDay !== undefined && simulatedDay !== null ? Number(simulatedDay) : null}
           )
