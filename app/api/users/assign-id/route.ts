@@ -10,32 +10,22 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    console.log('Received request body:', body)
+    console.log('Assign ID request:', body)
 
-    // Get the highest current user ID
-    const { data: lastUser, error: queryError } = await executeQuery(async () => {
-      return await sql`
-        SELECT user_id FROM users 
-        WHERE user_id ~ '^U[0-9]+$'
-        ORDER BY CAST(SUBSTRING(user_id, 2) AS INTEGER) DESC 
-        LIMIT 1
-      `
+    // Simply get the count of users and add 1
+    const { data: userCount, error: countError } = await executeQuery(async () => {
+      return await sql`SELECT COUNT(*) as count FROM users`
     })
 
-    if (queryError) {
-      console.error('Error querying last user:', queryError)
-      return NextResponse.json({ error: 'Query error' }, { status: 500 })
+    if (countError) {
+      console.error('Count error:', countError)
+      return NextResponse.json({ error: 'Count error' }, { status: 500 })
     }
 
-    // Calculate next ID
-    let nextIdNumber = 1001
-    if (lastUser && lastUser.length > 0) {
-      const lastIdNumber = parseInt(lastUser[0].user_id.substring(1))
-      nextIdNumber = lastIdNumber + 1
-    }
-
-    const newUserId = `U${nextIdNumber}`
-    console.log('Assigning new user ID:', newUserId)
+    const nextNumber = 1001 + parseInt(userCount[0].count)
+    const newUserId = `U${nextNumber}`
+    
+    console.log('Creating user with ID:', newUserId)
 
     // Create user record
     const { data: newUser, error: insertError } = await executeQuery(async () => {
@@ -47,11 +37,9 @@ export async function POST(request: NextRequest) {
     })
 
     if (insertError) {
-      console.error('Error creating user:', insertError)
+      console.error('Insert error:', insertError)
       return NextResponse.json({ error: 'Insert error' }, { status: 500 })
     }
-
-    console.log('Successfully created user:', newUserId)
 
     return NextResponse.json({
       userId: newUserId,
@@ -61,9 +49,9 @@ export async function POST(request: NextRequest) {
     })
 
   } catch (error) {
-    console.error('Error in assign-id endpoint:', error)
+    console.error('Error in assign-id:', error)
     return NextResponse.json({ 
-      error: 'Failed to assign user ID', 
+      error: 'Server error', 
       details: error.message 
     }, { status: 500 })
   }
