@@ -1,81 +1,66 @@
-import { type NextRequest, NextResponse } from "next/server"
-import { sql, executeQuery } from "@/lib/db"
+// Express.js route for user ID assignment
+// This file should be part of a Node.js/Express API server
 
-export async function POST(request: NextRequest) {
-  try {
-    // Verify API key
-    const apiKey = request.headers.get('X-API-Key');
-    if (apiKey !== 'uwatch-api-12345-xyz-67890-abc') {
-      return NextResponse.json({ error: 'Invalid API key' }, { status: 401 });
+const express = require('express');
+const router = express.Router();
+
+// Simple in-memory counter for unique ID generation
+// In production, this should be stored in a database
+let userIdCounter = 1001; // Starting from 1001 as per the iOS code
+
+/**
+ * POST /api/users/assign-id
+ * Assigns a unique user ID to a device
+ */
+router.post('/', async (req, res) => {
+    try {
+        // Validate API key
+        const apiKey = req.headers['x-api-key'];
+        if (!apiKey || apiKey !== 'uwatch-api-12345-xyz-67890-abc') {
+            return res.status(401).json({ error: 'Unauthorized' });
+        }
+
+        // Parse device info from request body
+        const deviceInfo = req.body || {};
+        
+        // Generate a unique user ID
+        const userId = `U${userIdCounter}`;
+        userIdCounter++; // Increment for next user
+
+        // Log the device info for debugging
+        console.log(`🆔 Assigning user ID ${userId} to device:`, {
+            model: deviceInfo.deviceModel || 'Unknown',
+            version: deviceInfo.systemVersion || 'Unknown',
+            timestamp: deviceInfo.requestTimestamp || new Date().toISOString(),
+            appVersion: deviceInfo.appVersion || 'Unknown'
+        });
+
+        // Here you would typically save to database
+        // For now, we'll just return the assigned ID
+        
+        // Return the assigned user ID
+        res.status(200).json({
+            userId,
+            message: 'User ID assigned successfully',
+            timestamp: new Date().toISOString()
+        });
+
+    } catch (error) {
+        console.error('Error assigning user ID:', error);
+        res.status(500).json({ error: 'Insert error' });
     }
+});
 
-    const body = await request.json()
-    console.log('Assign ID request:', body)
+/**
+ * GET /api/users/assign-id
+ * Returns information about the endpoint (for testing)
+ */
+router.get('/', (req, res) => {
+    res.status(200).json({
+        message: 'User ID assignment endpoint',
+        nextId: `U${userIdCounter}`,
+        method: 'POST required'
+    });
+});
 
-    // Simply get the count of users and add 1
-    const { data: userCount, error: countError } = await executeQuery(async () => {
-      return await sql`SELECT COUNT(*) as count FROM users`
-    })
-
-    if (countError) {
-      console.error('Count error:', countError)
-      return NextResponse.json({ error: 'Count error' }, { status: 500 })
-    }
-
-    const nextNumber = 1001 + parseInt(userCount[0].count)
-    const newUserId = `U${nextNumber}`
-    
-    console.log('Creating user with ID:', newUserId)
-
-    // Create user record
-    const { data: newUser, error: insertError } = await executeQuery(async () => {
-      return await sql`
-        INSERT INTO users (user_id, created_at)
-        VALUES (${newUserId}, CURRENT_TIMESTAMP)
-        RETURNING user_id
-      `
-    })
-
-    if (insertError) {
-      console.error('Insert error:', insertError)
-      return NextResponse.json({ error: 'Insert error' }, { status: 500 })
-    }
-
-    return NextResponse.json({
-      userId: newUserId,
-      message: 'New user ID assigned successfully',
-      isNewUser: true,
-      assignedAt: new Date().toISOString()
-    })
-
-  } catch (error) {
-    console.error('Error in assign-id:', error)
-    return NextResponse.json({ 
-      error: 'Server error', 
-      details: error.message 
-    }, { status: 500 })
-  }
-}
-
-export async function GET(request: NextRequest) {
-  const apiKey = request.headers.get('X-API-Key');
-  if (apiKey !== 'uwatch-api-12345-xyz-67890-abc') {
-    return NextResponse.json({ error: 'Invalid API key' }, { status: 401 });
-  }
-
-  const { data, error } = await executeQuery(async () => {
-    const totalUsers = await sql`SELECT COUNT(*) as count FROM users`
-    const recentUsers = await sql`
-      SELECT user_id, created_at FROM users 
-      ORDER BY created_at DESC 
-      LIMIT 10
-    `
-    return { totalUsersRegistered: totalUsers[0].count, recentUsers }
-  })
-
-  if (error) {
-    return NextResponse.json({ error }, { status: 500 })
-  }
-
-  return NextResponse.json(data)
-}
+module.exports = router;
