@@ -1,55 +1,22 @@
 // Next.js API route for user ID assignment
 import { type NextRequest, NextResponse } from "next/server"
-import fs from 'fs'
-import path from 'path'
 
-// File to persist the counter across server restarts
-const counterFilePath = path.join(process.cwd(), 'user_id_counter.txt');
+// Simple counter that increments for each request
+// In production, this should be stored in a database
+// For now, we'll use timestamp-based IDs to ensure uniqueness across deployments
+let requestCounter = 0;
 
-// In-memory cache to avoid file I/O on every request
-let cachedCounter: number | null = null;
-
-// Function to get the current counter value
-function getCurrentCounter(): number {
-    if (cachedCounter !== null) {
-        return cachedCounter;
-    }
+// Function to generate a unique user ID
+function generateUniqueUserId(): string {
+    // Use current timestamp + request counter for uniqueness
+    const timestamp = Date.now();
+    const random = Math.floor(Math.random() * 1000);
+    requestCounter++;
     
-    try {
-        if (fs.existsSync(counterFilePath)) {
-            const counterStr = fs.readFileSync(counterFilePath, 'utf8').trim();
-            const counter = parseInt(counterStr) || 1001;
-            cachedCounter = counter;
-            return counter;
-        }
-    } catch (error) {
-        console.error('Error reading counter file:', error);
-    }
-    
-    cachedCounter = 1001; // Default starting value
-    return cachedCounter;
+    // Create a unique ID based on timestamp to avoid collisions
+    const uniqueId = 1001 + (timestamp % 100000) + requestCounter + random;
+    return `U${uniqueId}`;
 }
-
-// Function to save the counter value
-function saveCounter(counter: number): void {
-    try {
-        fs.writeFileSync(counterFilePath, counter.toString());
-        cachedCounter = counter;
-    } catch (error) {
-        console.error('Error saving counter file:', error);
-    }
-}
-
-// Function to get next unique user ID with file persistence
-function getNextUserId(): string {
-    const currentCounter = getCurrentCounter();
-    const nextCounter = currentCounter + 1;
-    saveCounter(nextCounter);
-    return `U${currentCounter}`;
-}
-
-// Store device assignments to prevent duplicates (in production, use database)
-const deviceAssignments = new Map<string, string>();
 
 /**
  * POST /api/users/assign-id
@@ -66,32 +33,21 @@ export async function POST(request: NextRequest) {
         // Parse device info from request body
         const deviceInfo = await request.json().catch(() => ({}));
         
-        // Create a unique device fingerprint to prevent duplicate assignments
-        const deviceFingerprint = `${deviceInfo.deviceModel || 'Unknown'}-${deviceInfo.systemVersion || 'Unknown'}-${deviceInfo.requestTimestamp || 'NoTimestamp'}`;
-        
-        // Check if we've already assigned an ID to this device
-        let userId = deviceAssignments.get(deviceFingerprint);
-        
-        if (!userId) {
-            // Generate a new unique user ID using the persistent counter
-            userId = getNextUserId();
-            deviceAssignments.set(deviceFingerprint, userId);
-        }
+        // Always generate a new unique user ID for each request
+        const userId = generateUniqueUserId();
 
         // Log the device info for debugging
-        console.log(`🆔 ${deviceAssignments.has(deviceFingerprint) ? 'Reusing' : 'Assigning new'} user ID ${userId} to device:`, {
+        console.log(`🆔 Assigning NEW user ID ${userId} to device:`, {
             userId,
             model: deviceInfo.deviceModel || 'Unknown',
             version: deviceInfo.systemVersion || 'Unknown',
             timestamp: deviceInfo.requestTimestamp || new Date().toISOString(),
             appVersion: deviceInfo.appVersion || 'Unknown',
-            deviceFingerprint,
-            isReused: deviceAssignments.has(deviceFingerprint)
+            vendorId: deviceInfo.vendorId || 'Unknown',
+            uniqueDeviceId: deviceInfo.uniqueDeviceId || 'Unknown',
+            requestId: deviceInfo.requestId || 'Unknown'
         });
 
-        // Here you would typically save to database with device fingerprint
-        // to prevent duplicate assignments to the same device
-        
         // Return the assigned user ID
         return NextResponse.json({
             userId,
@@ -110,11 +66,10 @@ export async function POST(request: NextRequest) {
  * Returns information about the endpoint (for testing)
  */
 export async function GET() {
-    const currentCounter = getCurrentCounter();
     return NextResponse.json({
         message: 'User ID assignment endpoint',
-        nextId: `U${currentCounter}`,
+        nextId: 'Will generate unique ID based on timestamp',
         method: 'POST required',
-        totalAssignments: deviceAssignments.size
+        requestCounter: requestCounter
     });
 }
